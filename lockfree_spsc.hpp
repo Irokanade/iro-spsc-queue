@@ -69,10 +69,6 @@ public:
         return try_emplace(std::move(value));
     }
 
-    bool empty() const noexcept {
-        return write_index_.load(std::memory_order_acquire) == read_index_.load(std::memory_order_acquire);
-    }
-
     T* front() noexcept {
         const size_t read_index = read_index_.load(std::memory_order_relaxed);
         if (read_index == write_index_.load(std::memory_order_acquire)) {
@@ -90,6 +86,23 @@ public:
             next_read_index = 0;
         }
         read_index_.store(next_read_index, std::memory_order_release);
+    }
+
+    size_t size() const noexcept {
+        const size_t write_index = write_index_.load(std::memory_order_acquire);
+        const size_t read_index = read_index_.load(std::memory_order_acquire);
+        if (write_index >= read_index) {
+            return write_index - read_index;
+        }
+        return write_index + buffer_capacity_ - read_index;
+    }
+
+    bool empty() const noexcept {
+        return write_index_.load(std::memory_order_acquire) == read_index_.load(std::memory_order_acquire);
+    }
+
+    size_t capacity() const noexcept {
+        return buffer_capacity_ - 1;
     }
     
 };
