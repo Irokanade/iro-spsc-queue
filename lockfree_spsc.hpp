@@ -1,8 +1,11 @@
 #pragma once
 
+#include <algorithm>
 #include <atomic>
+#include <cassert>
 #include <cstddef>
 #include <new>
+#include <type_traits>
 #include <utility>
 
 template <typename T>
@@ -13,7 +16,8 @@ private:
 #else
     static constexpr size_t cache_line_size = 64;
 #endif
-    static constexpr std::align_val_t cache_line_align = static_cast<std::align_val_t>(cache_line_size);
+    static constexpr size_t buffer_alignment = std::max(cache_line_size, alignof(T));
+    static constexpr std::align_val_t buffer_align_val = static_cast<std::align_val_t>(buffer_alignment);
 
     size_t buffer_capacity_; // capacity + 1 for the sentinel
     T* buffer_;
@@ -23,13 +27,16 @@ private:
 
 public:
     explicit LockFreeSpscQueue(const size_t capacity) : buffer_capacity_(capacity + 1), write_index_(0), read_index_(0) {
-        // round up alloc size to cahce line size
-        size_t alloc_size = ((buffer_capacity_ * sizeof(T)) + cache_line_size - 1) / cache_line_size * cache_line_size;
-        buffer_ = static_cast<T*>(::operator new(alloc_size, cache_line_align));
+        // round up alloc size to buffer alignment
+        size_t alloc_size = ((buffer_capacity_ * sizeof(T)) + buffer_alignment - 1) / buffer_alignment * buffer_alignment;
+        buffer_ = static_cast<T*>(::operator new(alloc_size, buffer_align_val));
     }
 
     ~LockFreeSpscQueue() {
-        ::operator delete(buffer_, cache_line_align);
+        // while (front()) {
+        //     pop();
+        // }
+        ::operator delete(buffer_, buffer_align_val);
     }
 
     LockFreeSpscQueue(const LockFreeSpscQueue&) = delete;
@@ -59,7 +66,7 @@ public:
     }
 
     bool try_push(T&& value) { 
-        return try_emplace(std::move(value)); 
+        return try_emplace(std::move(value));
     }
     
 };
