@@ -37,5 +37,29 @@ public:
     LockFreeSpscQueue(const LockFreeSpscQueue&&) = delete;
     LockFreeSpscQueue& operator=(const LockFreeSpscQueue&&) = delete;
 
+    template <typename... Args>
+    bool try_emplace(Args&&... args) {
+        const size_t write_index = write_index_.load(std::memory_order_relaxed);
+        size_t next_write_index = write_index + 1;
+        if (next_write_index == buffer_capacity_) {
+            next_write_index = 0;
+        }
+
+        if (next_write_index == read_index_.load(std::memory_order_acquire)) {
+            return false;
+        }
+
+        new (&buffer_[write_index]) T(std::forward<Args>(args)...);
+        write_index_.store(next_write_index, std::memory_order_release);
+        return true;
+    }
+
+    bool try_push(const T& value) { 
+        return try_emplace(value); 
+    }
+
+    bool try_push(T&& value) { 
+        return try_emplace(std::move(value)); 
+    }
     
 };
