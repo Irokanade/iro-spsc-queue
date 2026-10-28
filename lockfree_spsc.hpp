@@ -14,24 +14,24 @@ private:
     static constexpr size_t cache_line_size = 64;
 #endif
 
-    size_t buffer_capacity; // capacity + 1 for the sentinel
-    T* buffer;
+    size_t buffer_capacity_; // capacity + 1 for the sentinel
+    T* buffer_;
 
-    alignas(cache_line_size) std::atomic<size_t> write_index;
-    alignas(cache_line_size) std::atomic<size_t> read_index;
+    alignas(cache_line_size) std::atomic<size_t> write_index_;
+    alignas(cache_line_size) std::atomic<size_t> read_index_;
 
 public:
-    explicit LockFreeSpscQueue(const size_t capacity) : buffer_capacity(capacity + 1), write_index(0), read_index(0) {
+    explicit LockFreeSpscQueue(const size_t capacity) : buffer_capacity_(capacity + 1), write_index_(0), read_index_(0) {
         // alloc size must be multiple of alignment
-        size_t alloc_size = ((buffer_capacity * sizeof(T)) + cache_line_size - 1) / cache_line_size * cache_line_size;
-        buffer = static_cast<T*>(std::aligned_alloc(cache_line_size, alloc_size));
-        if (!buffer) {
+        size_t alloc_size = ((buffer_capacity_ * sizeof(T)) + cache_line_size - 1) / cache_line_size * cache_line_size;
+        buffer_ = static_cast<T*>(std::aligned_alloc(cache_line_size, alloc_size));
+        if (!buffer_) {
             throw std::bad_alloc();
         }
     }
 
     ~LockFreeSpscQueue() { 
-        std::free(buffer); 
+        std::free(buffer_); 
     }
 
     LockFreeSpscQueue(const LockFreeSpscQueue&) = delete;
