@@ -3,12 +3,12 @@
 #include <algorithm>
 #include <atomic>
 #include <cassert>
+#include <concepts>
 #include <cstddef>
 #include <new>
-#include <type_traits>
 #include <utility>
 
-template <typename T>
+template <std::destructible T>
 class LockFreeSpscQueue {
 private:
 #ifdef __cpp_lib_hardware_interference_size
@@ -33,9 +33,9 @@ public:
     }
 
     ~LockFreeSpscQueue() {
-        // while (front()) {
-        //     pop();
-        // }
+        while (front()) {
+            pop();
+        }
         ::operator delete(buffer_, buffer_align_val);
     }
 
@@ -67,6 +67,25 @@ public:
 
     bool try_push(T&& value) { 
         return try_emplace(std::move(value));
+    }
+
+    T* front() noexcept {
+        const size_t read_index = read_index_.load(std::memory_order_relaxed);
+        if (read_index == write_index_.load(std::memory_order_acquire)) {
+            return nullptr;
+        }
+        return &buffer_[read_index];
+    }
+
+    void pop() noexcept {
+        const size_t read_index = read_index_.load(std::memory_order_relaxed);
+        buffer_[read_index].~T();
+
+        size_t next_read_index = read_index + 1;
+        if (next_read_index == buffer_capacity_) {
+            next_read_index = 0;
+        }
+        read_index_.store(next_read_index, std::memory_order_release);
     }
     
 };
