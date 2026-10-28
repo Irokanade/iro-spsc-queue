@@ -5,10 +5,12 @@
 #include <cassert>
 #include <concepts>
 #include <cstddef>
+#include <memory>
 #include <new>
+#include <type_traits>
 #include <utility>
 
-template <std::destructible T>
+template <typename T>
 class LockFreeSpscQueue {
 private:
 #ifdef __cpp_lib_hardware_interference_size
@@ -41,11 +43,27 @@ public:
 
     LockFreeSpscQueue(const LockFreeSpscQueue&) = delete;
     LockFreeSpscQueue& operator=(const LockFreeSpscQueue&) = delete;
-    LockFreeSpscQueue(const LockFreeSpscQueue&&) = delete;
-    LockFreeSpscQueue& operator=(const LockFreeSpscQueue&&) = delete;
+    LockFreeSpscQueue(LockFreeSpscQueue&&) = delete;
+    LockFreeSpscQueue& operator=(LockFreeSpscQueue&&) = delete;
 
     template <typename... Args>
-    bool try_emplace(Args&&... args) {
+        requires std::constructible_from<T, Args&&...>
+    void emplace(Args&&... args) noexcept(std::is_nothrow_constructible_v<T, Args&&...>) {
+        const size_t write_index = write_index_.load(std::memory_order_relaxed);
+        size_t next_write_index = write_index + 1;
+        if (next_write_index == buffer_capacity_) {
+            next_write_index = 0;
+        }
+
+        while (next_write_index == read_index_.load(std::memory_order_acquire)) {}
+
+        std::construct_at(buffer_ + write_index, std::forward<Args>(args)...);
+        write_index_.store(next_write_index, std::memory_order_release);
+    }
+
+    template <typename... Args>
+        requires std::constructible_from<T, Args&&...>
+    bool try_emplace(Args&&... args) noexcept(std::is_nothrow_constructible_v<T, Args&&...>) {
         const size_t write_index = write_index_.load(std::memory_order_relaxed);
         size_t next_write_index = write_index + 1;
         if (next_write_index == buffer_capacity_) {
@@ -56,16 +74,24 @@ public:
             return false;
         }
 
-        new (&buffer_[write_index]) T(std::forward<Args>(args)...);
+        std::construct_at(buffer_ + write_index, std::forward<Args>(args)...);
         write_index_.store(next_write_index, std::memory_order_release);
         return true;
     }
 
-    bool try_push(const T& value) { 
-        return try_emplace(value); 
+    void push(const T& value) noexcept(std::is_nothrow_copy_constructible_v<T>) {
+        emplace(value);
     }
 
-    bool try_push(T&& value) { 
+    void push(T&& value) noexcept(std::is_nothrow_move_constructible_v<T>) {
+        emplace(std::move(value));
+    }
+
+    bool try_push(const T& value) noexcept(std::is_nothrow_copy_constructible_v<T>) {
+        return try_emplace(value);
+    }
+
+    bool try_push(T&& value) noexcept(std::is_nothrow_move_constructible_v<T>) {
         return try_emplace(std::move(value));
     }
 
