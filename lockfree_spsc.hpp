@@ -69,6 +69,10 @@ public:
         return try_emplace(std::move(value));
     }
 
+    bool empty() const noexcept {
+        return write_index_.load(std::memory_order_acquire) == read_index_.load(std::memory_order_acquire);
+    }
+
     T* front() noexcept {
         const size_t read_index = read_index_.load(std::memory_order_relaxed);
         if (read_index == write_index_.load(std::memory_order_acquire)) {
