@@ -11,9 +11,10 @@
 #include <utility>
 
 namespace iro {
+namespace lockfree {
 
 template <typename T>
-class LockFreeSpscQueue {
+class spsc_queue {
 private:
 #ifdef __cpp_lib_hardware_interference_size
     static constexpr size_t cache_line_size = std::hardware_destructive_interference_size;
@@ -33,23 +34,23 @@ private:
     size_t write_index_cached_ = 0;    
 
 public:
-    explicit LockFreeSpscQueue(const size_t capacity) : buffer_capacity_(capacity + 1) {
+    explicit spsc_queue(const size_t capacity) : buffer_capacity_(capacity + 1) {
         // round up alloc size to buffer alignment
         const size_t alloc_size = ((buffer_capacity_ * sizeof(T)) + buffer_alignment - 1) / buffer_alignment * buffer_alignment;
         buffer_ = static_cast<T*>(::operator new(alloc_size, buffer_align_val));
     }
 
-    ~LockFreeSpscQueue() {
+    ~spsc_queue() {
         while (front()) {
             pop();
         }
         ::operator delete(buffer_, buffer_align_val);
     }
 
-    LockFreeSpscQueue(const LockFreeSpscQueue&) = delete;
-    LockFreeSpscQueue& operator=(const LockFreeSpscQueue&) = delete;
-    LockFreeSpscQueue(LockFreeSpscQueue&&) = delete;
-    LockFreeSpscQueue& operator=(LockFreeSpscQueue&&) = delete;
+    spsc_queue(const spsc_queue&) = delete;
+    spsc_queue& operator=(const spsc_queue&) = delete;
+    spsc_queue(spsc_queue&&) = delete;
+    spsc_queue& operator=(spsc_queue&&) = delete;
 
     template <typename... Args>
         requires std::constructible_from<T, Args&&...>
@@ -145,4 +146,5 @@ public:
     }
 };
 
+} // namespace lockfree
 } // namespace iro
