@@ -1,3 +1,7 @@
-// ide
-.idea
-.vscode
+# ide
+.idea/
+.vscode/
+
+# build output
+build/
+cmake-build-*/
