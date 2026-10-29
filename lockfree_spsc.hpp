@@ -10,6 +10,8 @@
 #include <type_traits>
 #include <utility>
 
+namespace iro {
+
 template <typename T>
 class LockFreeSpscQueue {
 private:
@@ -141,5 +143,6 @@ public:
     size_t capacity() const noexcept {
         return buffer_capacity_ - 1;
     }
-    
 };
+
+} // namespace iro
