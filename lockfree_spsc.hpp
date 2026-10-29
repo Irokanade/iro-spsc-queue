@@ -24,13 +24,16 @@ private:
     size_t buffer_capacity_; // capacity + 1 for the sentinel
     T* buffer_;
 
-    alignas(cache_line_size) std::atomic<size_t> write_index_;
-    alignas(cache_line_size) std::atomic<size_t> read_index_;
+    alignas(cache_line_size) std::atomic<size_t> write_index_ = {0};
+    size_t read_index_cached_ = 0;
+
+    alignas(cache_line_size) std::atomic<size_t> read_index_ = {0};
+    size_t write_index_cached_ = 0;    
 
 public:
-    explicit LockFreeSpscQueue(const size_t capacity) : buffer_capacity_(capacity + 1), write_index_(0), read_index_(0) {
+    explicit LockFreeSpscQueue(const size_t capacity) : buffer_capacity_(capacity + 1) {
         // round up alloc size to buffer alignment
-        size_t alloc_size = ((buffer_capacity_ * sizeof(T)) + buffer_alignment - 1) / buffer_alignment * buffer_alignment;
+        const size_t alloc_size = ((buffer_capacity_ * sizeof(T)) + buffer_alignment - 1) / buffer_alignment * buffer_alignment;
         buffer_ = static_cast<T*>(::operator new(alloc_size, buffer_align_val));
     }
 
@@ -55,7 +58,9 @@ public:
             next_write_index = 0;
         }
 
-        while (next_write_index == read_index_.load(std::memory_order_acquire)) {}
+        while (next_write_index == read_index_cached_) {
+            read_index_cached_ = read_index_.load(std::memory_order_acquire);
+        }
 
         std::construct_at(buffer_ + write_index, std::forward<Args>(args)...);
         write_index_.store(next_write_index, std::memory_order_release);
@@ -70,8 +75,11 @@ public:
             next_write_index = 0;
         }
 
-        if (next_write_index == read_index_.load(std::memory_order_acquire)) {
-            return false;
+        if (next_write_index == read_index_cached_) {
+            read_index_cached_ = read_index_.load(std::memory_order_acquire);
+            if (next_write_index == read_index_cached_) {
+                return false;
+            }
         }
 
         std::construct_at(buffer_ + write_index, std::forward<Args>(args)...);
@@ -97,8 +105,11 @@ public:
 
     T* front() noexcept {
         const size_t read_index = read_index_.load(std::memory_order_relaxed);
-        if (read_index == write_index_.load(std::memory_order_acquire)) {
-            return nullptr;
+        if (read_index == write_index_cached_) {
+            write_index_cached_ = write_index_.load(std::memory_order_acquire);
+            if (read_index == write_index_cached_) {
+                return nullptr;
+            }
         }
         return &buffer_[read_index];
     }
